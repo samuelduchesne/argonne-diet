@@ -101,6 +101,13 @@
       font-weight: 700;
       letter-spacing: 0.2px;
       cursor: pointer;
+      white-space: nowrap;
+    }
+    @media (max-width: 480px) {
+      button {
+        white-space: normal;
+        min-height: 44px;
+      }
     }
     button.ghost {
       background: transparent;
@@ -116,6 +123,7 @@
       border: 1px dashed rgba(255,255,255,0.15);
       color: var(--muted);
       font-size: 0.9rem;
+      word-break: break-word;
     }
     .state {
       display: flex;
@@ -128,6 +136,15 @@
       background: #0c1322;
     }
     .state h3 { margin: 0; font-size: 1.05rem; }
+    @media (max-width: 480px) {
+      .state {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .state .badge {
+        align-self: flex-end;
+      }
+    }
     .badge {
       padding: 6px 10px;
       border-radius: 999px;
@@ -151,10 +168,19 @@
       vertical-align: top;
     }
     .table th { color: var(--muted); font-weight: 600; }
+    @media (max-width: 480px) {
+      .table {
+        font-size: 0.85rem;
+      }
+      .table th, .table td {
+        padding: 8px 4px;
+      }
+    }
     .hint {
       font-size: 0.85rem;
       color: var(--muted);
       margin-top: 8px;
+      line-height: 1.5;
     }
     .footer {
       color: var(--muted);
@@ -163,6 +189,11 @@
       line-height: 1.5;
     }
     .cta-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    @media (max-width: 480px) {
+      .cta-row {
+        flex-direction: column;
+      }
+    }
     .hr { height: 1px; background: rgba(255,255,255,0.08); margin: 12px 0; border: 0; }
   </style>
 </head>
@@ -205,8 +236,7 @@
           <div class="hint">Tip: Argonne anchors to destination breakfast on arrival day.</div>
         </div>
 
-        <div>
-          <label>&nbsp;</label>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
           <button id="compute">Compute plan</button>
           <div class="hint" id="dirHint"></div>
         </div>
@@ -223,7 +253,7 @@
         </div>
         <div class="badge" id="stageBadge">—</div>
       </div>
-      <div class="hr"></div>
+      <div class="hr" id="statusDivider" hidden></div>
       <div class="grid">
         <div>
           <label>Countdown to destination breakfast</label>
@@ -288,6 +318,7 @@
       const dirHintEl = document.getElementById('dirHint');
 
       const statusRow = document.getElementById('statusRow');
+      const statusDivider = document.getElementById('statusDivider');
       const stageBadge = document.getElementById('stageBadge');
       const currentStageTitle = document.getElementById('currentStageTitle');
       const currentStageInfo = document.getElementById('currentStageInfo');
@@ -470,6 +501,7 @@
 
         const nowStage = currentStageNow(days, anchorDest, nowLocal, originTz);
         statusRow.hidden = false;
+        statusDivider.hidden = false;
         stageBadge.className = 'badge ' + (nowStage.stage === 'FEAST' ? 'feast' : 'fast');
         stageBadge.textContent = nowStage.stage;
         currentStageTitle.textContent = `Current Stage: ${nowStage.stage}`;
