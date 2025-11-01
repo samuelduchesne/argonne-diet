@@ -44,6 +44,11 @@
     header {
       padding: 20px 8px 8px;
     }
+    @media (max-width: 480px) {
+      header {
+        padding: 16px 4px 8px;
+      }
+    }
     h1 {
       font-size: 1.4rem;
       margin: 0;
@@ -61,6 +66,11 @@
       padding: 14px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.45);
       backdrop-filter: blur(6px);
+    }
+    @media (max-width: 480px) {
+      .card {
+        padding: 12px;
+      }
     }
     .grid {
       display: grid;
@@ -187,6 +197,12 @@
       font-size: 0.85rem;
       padding: 18px 8px 40px;
       line-height: 1.5;
+    }
+    @media (max-width: 480px) {
+      .footer {
+        padding: 16px 4px 32px;
+        font-size: 0.8rem;
+      }
     }
     .cta-row { display: flex; gap: 10px; flex-wrap: wrap; }
     @media (max-width: 480px) {
