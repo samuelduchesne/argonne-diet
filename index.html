@@ -205,12 +205,18 @@
       }
     }
     .cta-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .button-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
     @media (max-width: 480px) {
       .cta-row {
         flex-direction: column;
       }
     }
     .hr { height: 1px; background: rgba(255,255,255,0.08); margin: 12px 0; border: 0; }
+    .spacer { height: 10px; }
   </style>
 </head>
 <body>
@@ -252,14 +258,14 @@
           <div class="hint">Tip: Argonne anchors to destination breakfast on arrival day.</div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="button-container">
           <button id="compute">Compute plan</button>
           <div class="hint" id="dirHint"></div>
         </div>
       </div>
     </section>
 
-    <div style="height:10px"></div>
+    <div class="spacer"></div>
 
     <section class="card" aria-label="Current status">
       <div class="state" id="statusRow" hidden>
@@ -284,7 +290,7 @@
       </div>
     </section>
 
-    <div style="height:10px"></div>
+    <div class="spacer"></div>
 
     <section class="card" aria-label="Four-day diet plan">
       <label>4-Day FEAST/FAST schedule (anchored to destination breakfast)</label>
