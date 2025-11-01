@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>Argonne Jet-Lag Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --card: #111726;
+      --muted: #93a0b8;
+      --text: #e8eefc;
+      --accent: #5b8cff;
+      --accent-2: #e0fc69;
+      --ok: #38d39f;
+      --warn: #ffb020;
+      --danger: #ff5c7a;
+      --ring: rgba(91, 140, 255, 0.4);
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      background: radial-gradient(1200px 800px at 10% -10%, #182037, #0b0f14);
+      margin: 0;
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    a { color: var(--accent); text-decoration: none; }
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    }
+    header {
+      padding: 20px 8px 8px;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin: 0;
+      letter-spacing: 0.2px;
+    }
+    .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+      backdrop-filter: blur(6px);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 720px) {
+      .grid-2 { grid-template-columns: 1fr 1fr; }
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 6px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 12px 13px;
+      background: #0f1627;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 16px;
+      outline: none;
+    }
+    input:focus, select:focus, button:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 6px var(--ring);
+    }
+    button {
+      background: linear-gradient(180deg, #4570ff, #2e56ea);
+      border: none;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      cursor: pointer;
+    }
+    button.ghost {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.12);
+      font-weight: 600;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px dashed rgba(255,255,255,0.15);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .state {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: #0c1322;
+    }
+    .state h3 { margin: 0; font-size: 1.05rem; }
+    .badge {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.8rem;
+      letter-spacing: 0.2px;
+      text-transform: uppercase;
+    }
+    .feast { background: rgba(56, 211, 159, 0.18); border: 1px solid rgba(56, 211, 159, 0.45); }
+    .fast { background: rgba(255, 92, 122, 0.18); border: 1px solid rgba(255, 92, 122, 0.45); }
+    .info { color: var(--muted); font-size: 0.92rem; line-height: 1.4; }
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    .table th, .table td {
+      padding: 10px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      text-align: left;
+      vertical-align: top;
+    }
+    .table th { color: var(--muted); font-weight: 600; }
+    .hint {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+    .footer {
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 18px 8px 40px;
+      line-height: 1.5;
+    }
+    .cta-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .hr { height: 1px; background: rgba(255,255,255,0.08); margin: 12px 0; border: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Argonne Jet-Lag Planner</h1>
+      <div class="sub">Plan your FEAST/FAST cycle and hit destination breakfast on time.</div>
+    </header>
+
+    <section class="card" aria-label="Trip setup">
+      <div class="grid grid-2">
+        <div>
+          <label for="originTz">Origin time zone</label>
+          <select id="originTz"></select>
+          <div class="hint">Auto-filled to your device’s zone; change if needed.</div>
+        </div>
+        <div>
+          <label for="destTz">Destination time zone</label>
+          <select id="destTz"></select>
+          <div class="hint">Pick the IANA time zone for your destination city.</div>
+        </div>
+
+        <div>
+          <label for="departLocal">Departure (origin local)</label>
+          <input id="departLocal" type="datetime-local" />
+        </div>
+        <div>
+          <label for="arriveLocal">Arrival (destination local)</label>
+          <input id="arriveLocal" type="datetime-local" />
+        </div>
+
+        <div>
+          <label for="breakfastTime">Breakfast time (destination local)</label>
+          <input id="breakfastTime" type="time" step="900" />
+          <div class="cta-row" style="margin-top:8px">
+            <button class="ghost" id="suggest730">Use 07:30</button>
+            <button class="ghost" id="suggestHotel">Suggest typical</button>
+          </div>
+          <div class="hint">Tip: Argonne anchors to destination breakfast on arrival day.</div>
+        </div>
+
+        <div>
+          <label>&nbsp;</label>
+          <button id="compute">Compute plan</button>
+          <div class="hint" id="dirHint"></div>
+        </div>
+      </div>
+    </section>
+
+    <div style="height:10px"></div>
+
+    <section class="card" aria-label="Current status">
+      <div class="state" id="statusRow" hidden>
+        <div>
+          <h3 id="currentStageTitle">Current Stage</h3>
+          <div class="info" id="currentStageInfo"></div>
+        </div>
+        <div class="badge" id="stageBadge">—</div>
+      </div>
+      <div class="hr"></div>
+      <div class="grid">
+        <div>
+          <label>Countdown to destination breakfast</label>
+          <div class="pill" id="countdownPill">—</div>
+          <div class="hint" id="anchorExplain"></div>
+        </div>
+        <div>
+          <label>Caffeine window (today)</label>
+          <div class="pill" id="caffeinePill">—</div>
+          <div class="hint">Argonne restricts caffeine timing; varies by direction and day.</div>
+        </div>
+      </div>
+    </section>
+
+    <div style="height:10px"></div>
+
+    <section class="card" aria-label="Four-day diet plan">
+      <label>4-Day FEAST/FAST schedule (anchored to destination breakfast)</label>
+      <table class="table" id="planTable" aria-describedby="planHelp">
+        <thead>
+          <tr>
+            <th>Day</th>
+            <th>Date (your local)</th>
+            <th>Stage</th>
+            <th>Meals & caffeine</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="hint" id="planHelp">
+        Break the final FAST with a high-protein breakfast at destination breakfast time; then follow destination mealtimes.
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div><strong>How this works</strong></div>
+      <div>
+        The Argonne Anti-Jet-Lag Diet sets an anchor at your destination’s breakfast time on the day you arrive.
+        Count back four days and alternate <em>FEAST → FAST → FEAST → FAST</em>.
+        On arrival morning, <strong>break the fast at destination breakfast</strong> with a high-protein meal.
+        Caffeine: days 1–3 only between 15:00–17:00; day 4 is morning if traveling west, or 18:00–23:00 if traveling east. No alcohol on the plane.
+      </div>
+      <div class="hint" style="margin-top:10px">
+        Sources: Argonne Anti-Jet-Lag Diet and summaries. See “Argonne Anti-Jet-Lag Diet” (netlib), a printable guide,
+        and Argonne Lab news release. Also Wired’s overview of the protocol. 
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      const { DateTime, Duration, Interval, Settings } = luxon;
+
+      const originTzEl = document.getElementById('originTz');
+      const destTzEl = document.getElementById('destTz');
+      const departEl = document.getElementById('departLocal');
+      const arriveEl = document.getElementById('arriveLocal');
+      const breakfastEl = document.getElementById('breakfastTime');
+      const suggest730El = document.getElementById('suggest730');
+      const suggestHotelEl = document.getElementById('suggestHotel');
+      const computeEl = document.getElementById('compute');
+      const dirHintEl = document.getElementById('dirHint');
+
+      const statusRow = document.getElementById('statusRow');
+      const stageBadge = document.getElementById('stageBadge');
+      const currentStageTitle = document.getElementById('currentStageTitle');
+      const currentStageInfo = document.getElementById('currentStageInfo');
+
+      const countdownPill = document.getElementById('countdownPill');
+      const anchorExplain = document.getElementById('anchorExplain');
+      const caffeinePill = document.getElementById('caffeinePill');
+
+      const planTableBody = document.querySelector('#planTable tbody');
+
+      // Populate time zones
+      const tzList = (Intl.supportedValuesOf && Intl.supportedValuesOf('timeZone')) || [];
+      const addTzOptions = (sel) => {
+        tzList.forEach((tz) => {
+          const opt = document.createElement('option');
+          opt.value = tz;
+          opt.textContent = tz;
+          sel.appendChild(opt);
+        });
+      };
+      addTzOptions(originTzEl);
+      addTzOptions(destTzEl);
+
+      // Defaults
+      try {
+        originTzEl.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      } catch (_) {}
+      destTzEl.value = originTzEl.value;
+
+      // Pre-fill date/time fields nicely
+      const now = DateTime.now();
+      departEl.value = now.plus({ hours: 48 }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
+      arriveEl.value = now.plus({ hours: 56 }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
+      breakfastEl.value = '07:30';
+
+      suggest730El.addEventListener('click', (e) => {
+        e.preventDefault();
+        breakfastEl.value = '07:30';
+      });
+
+      suggestHotelEl.addEventListener('click', (e) => {
+        e.preventDefault();
+        // Heuristic “typical hotel breakfast” window 07:00–10:00; pick 08:00.
+        breakfastEl.value = '08:00';
+      });
+
+      const fmt = (dt, tz) =>
+        dt.setZone(tz).toLocaleString({ weekday: 'short', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+      const fmtDate = (dt, tz) =>
+        dt.setZone(tz).toLocaleString({ weekday: 'short', month: 'short', day: '2-digit' });
+
+      function computeDirection(originTz, destTz, at) {
+        // Positive if destination is ahead of origin => eastbound
+        const o = at.setZone(originTz).offset; // minutes
+        const d = at.setZone(destTz).offset;
+        const deltaMin = d - o;
+        if (deltaMin === 0) return { direction: 'none', deltaHours: 0 };
+        return deltaMin > 0 ? { direction: 'east', deltaHours: deltaMin / 60 } : { direction: 'west', deltaHours: deltaMin / 60 };
+      }
+
+      function planDiet(anchorBreakfastDest, originTz, destTz) {
+        // Anchor = destination breakfast datetime (arrival day at dest breakfast clock time)
+        // Generate 4 days prior: Day -4..-1 = FEAST, FAST, FEAST, FAST (Day -4 = Feast)
+        const days = [-4, -3, -2, -1].map((d, i) => {
+          const date = anchorBreakfastDest.plus({ days: d }).set({
+            hour: 12, minute: 0, second: 0, millisecond: 0
+          });
+          const stage = (i % 2 === 0) ? 'FEAST' : 'FAST';
+          return { idx: d, date, stage };
+        });
+        return days;
+      }
+
+      function caffeineWindowForDay(dayIdx, direction, tz) {
+        // Argonne: Days 1–3 (relative to start) caffeine only 15:00–17:00 local.
+        // Our day indices are -4, -3, -2, -1; treat all pre-travel days same except day -1:
+        // Day -1 (travel/fast): caffeine morning if westbound, or 18:00–23:00 if eastbound. On plane: avoid.
+        const base = DateTime.now().setZone(tz).startOf('day');
+        if (dayIdx > -2) {
+          // Day -1 special
+          if (direction === 'west') {
+            return { start: base.plus({ hours: 8 }), end: base.plus({ hours: 12 }), label: 'Morning (08:00–12:00)' };
+          }
+          if (direction === 'east') {
+            return { start: base.plus({ hours: 18 }), end: base.plus({ hours: 23 }), label: '18:00–23:00' };
+          }
+          return { start: null, end: null, label: 'See note' };
+        }
+        const start = base.plus({ hours: 15 });
+        const end = base.plus({ hours: 17 });
+        return { start, end, label: '15:00–17:00' };
+      }
+
+      function stageAdvice(stage) {
+        if (stage === 'FEAST') {
+          return 'High-protein breakfast & lunch; high-carb dinner. Hydrate. Caffeine only in allowed window.';
+        }
+        return 'Light meals (salads, soups, fruits, juices). Hydrate. Avoid alcohol; caffeine only in allowed window.';
+      }
+
+      function renderPlan(days, originTz, destTz, direction, anchorDest) {
+        planTableBody.innerHTML = '';
+        days.forEach(({ idx, date, stage }) => {
+          const tr = document.createElement('tr');
+
+          const tdDay = document.createElement('td');
+          tdDay.textContent = idx === -4 ? 'Day 1' : idx === -3 ? 'Day 2' : idx === -2 ? 'Day 3' : 'Day 4 (Travel)';
+          tr.appendChild(tdDay);
+
+          const tdDate = document.createElement('td');
+          // Show user-local date for practicality
+          tdDate.textContent = fmtDate(date.setZone(Settings.defaultZone || originTz), Settings.defaultZone || originTz);
+          tr.appendChild(tdDate);
+
+          const tdStage = document.createElement('td');
+          const badge = document.createElement('span');
+          badge.className = 'badge ' + (stage === 'FEAST' ? 'feast' : 'fast');
+          badge.textContent = stage;
+          tdStage.appendChild(badge);
+          tr.appendChild(tdStage);
+
+          const tdMeals = document.createElement('td');
+          const cw = caffeineWindowForDay(idx, direction, originTz);
+          tdMeals.innerHTML = `
+            ${stageAdvice(stage)}<br/>
+            <span class="hint">Caffeine window: <strong>${cw.label}</strong> (pre-travel day)</span>
+          `;
+          tr.appendChild(tdMeals);
+
+          planTableBody.appendChild(tr);
+        });
+
+        // Append final row for arrival breakfast
+        const tr = document.createElement('tr');
+        const td1 = document.createElement('td'); td1.textContent = 'Arrival';
+        const td2 = document.createElement('td'); td2.textContent = fmt(anchorDest, destTz);
+        const td3 = document.createElement('td');
+        const badge = document.createElement('span'); badge.className = 'badge feast'; badge.textContent = 'BREAK FAST';
+        td3.appendChild(badge);
+        const td4 = document.createElement('td');
+        td4.innerHTML = 'High-protein breakfast at destination breakfast time; then follow destination mealtimes.';
+        tr.append(td1, td2, td3, td4);
+        planTableBody.appendChild(tr);
+      }
+
+      function currentStageNow(days, anchorDest, nowUserLocal, originTz) {
+        // Map now to which pre-travel day we are in relative to user's local noon midpoint per day.
+        // Simple mapping: find the closest schedule day whose date part matches now (user local).
+        const todayLocal = nowUserLocal.startOf('day');
+        for (let i = days.length - 1; i >= 0; i--) {
+          const d = days[i].date.setZone(originTz);
+          if (d.startOf('day').equals(todayLocal)) return days[i];
+        }
+        // If none match, pick the nearest by absolute diff
+        let best = days[0];
+        let bestDiff = Math.abs(days[0].date.diff(nowUserLocal, 'hours').hours);
+        for (const d of days) {
+          const diff = Math.abs(d.date.diff(nowUserLocal, 'hours').hours);
+          if (diff < bestDiff) { best = d; bestDiff = diff; }
+        }
+        return best;
+      }
+
+      function updateStatus(days, anchorDest, originTz, destTz, direction) {
+        const nowLocal = DateTime.now();
+        const nowDest = nowLocal.setZone(destTz);
+        const diff = anchorDest.diff(nowDest, ['days', 'hours', 'minutes', 'seconds']).shiftTo('days', 'hours', 'minutes');
+
+        const sign = diff.valueOf() < 0 ? -1 : 1;
+        const parts = [];
+        const d = Math.abs(diff.days);
+        const h = Math.abs(diff.hours);
+        const m = Math.abs(diff.minutes);
+        if (d) parts.push(`${d}d`);
+        if (h || !d) parts.push(`${h}h`);
+        parts.push(`${m}m`);
+        countdownPill.textContent = sign >= 0 ? `in ${parts.join(' ')}` : `${parts.join(' ')} ago`;
+        anchorExplain.textContent = `Anchor: ${anchorDest.setZone(destTz).toLocaleString(DateTime.DATETIME_MED)} (${destTz})`;
+
+        const nowStage = currentStageNow(days, anchorDest, nowLocal, originTz);
+        statusRow.hidden = false;
+        stageBadge.className = 'badge ' + (nowStage.stage === 'FEAST' ? 'feast' : 'fast');
+        stageBadge.textContent = nowStage.stage;
+        currentStageTitle.textContent = `Current Stage: ${nowStage.stage}`;
+        currentStageInfo.textContent = stageAdvice(nowStage.stage);
+
+        // Today caffeine window display in user's local time for practicality
+        const cw = caffeineWindowForDay(nowStage.idx, direction, originTz);
+        if (cw.start && cw.end) {
+          caffeinePill.textContent = `${cw.start.toLocaleString(DateTime.TIME_SIMPLE)}–${cw.end.toLocaleString(DateTime.TIME_SIMPLE)} (${originTz})`;
+        } else {
+          caffeinePill.textContent = `See daily note`;
+        }
+      }
+
+      computeEl.addEventListener('click', (e) => {
+        e.preventDefault();
+
+        const originTz = originTzEl.value;
+        const destTz = destTzEl.value;
+        const departLocal = DateTime.fromISO(departEl.value, { zone: originTz });
+        const arriveLocal = DateTime.fromISO(arriveEl.value, { zone: destTz });
+
+        if (!departLocal.isValid || !arriveLocal.isValid) {
+          alert('Please enter valid departure/arrival datetimes.');
+          return;
+        }
+        const dir = computeDirection(originTz, destTz, departLocal);
+        if (dir.direction === 'east') {
+          dirHintEl.textContent = `Trip appears eastbound (${Math.abs(dir.deltaHours)}h ahead). Day-4 caffeine window is 18:00–23:00.`;
+        } else if (dir.direction === 'west') {
+          dirHintEl.textContent = `Trip appears westbound (${Math.abs(dir.deltaHours)}h behind). Day-4 caffeine window is morning.`;
+        } else {
+          dirHintEl.textContent = `No time-zone change detected.`;
+        }
+
+        // Build anchor breakfast datetime (arrival date + breakfast time in dest TZ)
+        const [hh, mm] = (breakfastEl.value || '07:30').split(':').map((x) => parseInt(x, 10));
+        const anchorBreakfastDest = arriveLocal.set({ hour: hh || 7, minute: mm || 30, second: 0, millisecond: 0 });
+
+        // If arrival after selected breakfast time, next day's breakfast
+        const anchor = arriveLocal > anchorBreakfastDest
+          ? anchorBreakfastDest.plus({ days: 1 })
+          : anchorBreakfastDest;
+
+        const days = planDiet(anchor, originTz, destTz);
+        renderPlan(days, originTz, destTz, dir.direction, anchor);
+        updateStatus(days, anchor, originTz, destTz, dir.direction);
+      });
+    })();
+  </script>
+</body>
+</html>
