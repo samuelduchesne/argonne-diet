@@ -260,6 +260,46 @@
       animation: fadeIn 0.4s ease;
     }
     html { scroll-behavior: smooth; }
+    .notification {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      animation: fadeIn 0.4s ease;
+    }
+    .notification.success {
+      border-color: var(--ok);
+      background: rgba(56, 211, 159, 0.1);
+    }
+    .notification.info {
+      border-color: var(--accent);
+      background: rgba(91, 140, 255, 0.1);
+    }
+    .notification-content {
+      flex: 1;
+      font-size: 0.9rem;
+      color: var(--text);
+    }
+    .notification button {
+      width: auto;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+    }
+    .reset-btn {
+      margin-left: 8px;
+    }
+    @media (max-width: 600px) {
+      .notification {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
   </style>
 </head>
 <body>
@@ -268,6 +308,8 @@
       <h1>Argonne Jet-Lag Planner</h1>
       <div class="sub">Plan your FEAST/FAST cycle and hit destination breakfast on time.</div>
     </header>
+
+    <div id="notification" style="display: none;"></div>
 
     <section class="card" aria-labelledby="trip-setup-heading">
       <h2 id="trip-setup-heading" style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;">Trip Setup</h2>
@@ -305,7 +347,10 @@
 
         <div>
           <label for="compute" style="visibility: hidden;">Compute</label>
-          <button id="compute" type="button">Compute plan</button>
+          <div style="display: flex; gap: 8px;">
+            <button id="compute" type="button" style="flex: 1;">Compute plan</button>
+            <button id="resetBtn" type="button" class="ghost reset-btn" style="display: none; width: auto; flex: 0 0 auto;">Reset</button>
+          </div>
           <div class="hint" id="dirHint" role="status" aria-live="polite"></div>
         </div>
       </div>
@@ -398,15 +443,68 @@
 
       const planTableBody = document.querySelector('#planTable tbody');
       const planForm = document.getElementById('planForm');
+      const resetBtn = document.getElementById('resetBtn');
+      const notificationEl = document.getElementById('notification');
 
       // Store computed plan data for real-time updates
       let currentPlan = null;
       let updateInterval = null;
 
+      // Notification helper
+      function showNotification(message, type = 'info', actions = null) {
+        notificationEl.innerHTML = `
+          <div class="notification-content">${message}</div>
+          ${actions || ''}
+        `;
+        notificationEl.className = `notification ${type}`;
+        notificationEl.style.display = 'block';
+      }
+
+      function hideNotification() {
+        notificationEl.style.display = 'none';
+      }
+
       // Prevent form submission on Enter key
       planForm.addEventListener('submit', (e) => {
         e.preventDefault();
         computeEl.click();
+      });
+
+      // Reset button handler
+      resetBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to reset? This will clear your saved plan.')) {
+          // Clear localStorage
+          localStorage.removeItem('argonnePlan');
+
+          // Clear interval
+          if (updateInterval) {
+            clearInterval(updateInterval);
+            updateInterval = null;
+          }
+
+          // Reset variables
+          currentPlan = null;
+
+          // Hide reset button
+          resetBtn.style.display = 'none';
+
+          // Hide status row
+          statusRow.hidden = true;
+
+          // Clear table
+          planTableBody.innerHTML = '';
+
+          // Reset form to defaults
+          const now = DateTime.now();
+          departEl.value = now.plus({ hours: 48 }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
+          arriveEl.value = now.plus({ hours: 56 }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
+          breakfastEl.value = '07:30';
+          dirHintEl.textContent = '';
+
+          // Show notification
+          showNotification('Plan reset. Enter your trip details to create a new plan.', 'info');
+          setTimeout(hideNotification, 3000);
+        }
       });
 
       // Auto theme detection based on system preference
@@ -445,11 +543,84 @@
       } catch (_) {}
       destTzEl.value = originTzEl.value;
 
+      // Try to restore saved plan
+      function restoreSavedPlan() {
+        const saved = localStorage.getItem('argonnePlan');
+        if (!saved) return false;
+
+        try {
+          const planData = JSON.parse(saved);
+          const arriveTime = DateTime.fromISO(planData.arriveTime);
+          const now = DateTime.now();
+
+          // Check if plan has expired (current time is after arrival)
+          if (now >= arriveTime) {
+            localStorage.removeItem('argonnePlan');
+            return false;
+          }
+
+          // Restore form values
+          originTzEl.value = planData.originTz;
+          destTzEl.value = planData.destTz;
+          departEl.value = DateTime.fromISO(planData.departTime).toISO({ suppressSeconds: true, includeOffset: false });
+          arriveEl.value = arriveTime.toISO({ suppressSeconds: true, includeOffset: false });
+          breakfastEl.value = planData.breakfastTime;
+
+          // Recreate plan objects
+          const anchor = DateTime.fromISO(planData.anchor);
+          const days = planData.days.map(d => ({
+            idx: d.idx,
+            date: DateTime.fromISO(d.date),
+            stage: d.stage
+          }));
+
+          // Render plan
+          renderPlan(days, planData.originTz, planData.destTz, planData.direction, anchor);
+
+          // Store for updates
+          currentPlan = {
+            days,
+            anchor,
+            originTz: planData.originTz,
+            destTz: planData.destTz,
+            direction: planData.direction
+          };
+
+          // Update status
+          updateStatus(days, anchor, planData.originTz, planData.destTz, planData.direction);
+
+          // Start countdown
+          if (updateInterval) clearInterval(updateInterval);
+          updateInterval = setInterval(() => {
+            if (currentPlan) {
+              updateStatus(currentPlan.days, currentPlan.anchor, currentPlan.originTz, currentPlan.destTz, currentPlan.direction);
+            }
+          }, 1000);
+
+          // Show reset button
+          resetBtn.style.display = 'block';
+
+          // Show notification
+          const savedDate = DateTime.fromISO(planData.savedAt);
+          showNotification(`✓ Restored your saved plan from ${savedDate.toLocaleString(DateTime.DATETIME_MED)}`, 'info');
+          setTimeout(hideNotification, 5000);
+
+          return true;
+        } catch (error) {
+          console.error('Failed to restore plan:', error);
+          localStorage.removeItem('argonnePlan');
+          return false;
+        }
+      }
+
       // Pre-fill date/time fields nicely
       const now = DateTime.now();
       departEl.value = now.plus({ hours: 48 }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
       arriveEl.value = now.plus({ hours: 56 }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
       breakfastEl.value = '07:30';
+
+      // Try to restore saved plan on load
+      restoreSavedPlan();
 
       suggest730El.addEventListener('click', (e) => {
         e.preventDefault();
@@ -685,6 +856,23 @@
         // Store plan for real-time updates
         currentPlan = { days, anchor, originTz, destTz, direction: dir.direction };
 
+        // Save to localStorage with expiration
+        const planData = {
+          days: days.map(d => ({ idx: d.idx, date: d.date.toISO(), stage: d.stage })),
+          anchor: anchor.toISO(),
+          originTz,
+          destTz,
+          direction: dir.direction,
+          arriveTime: arriveLocal.toISO(),
+          departTime: departLocal.toISO(),
+          breakfastTime: breakfastEl.value,
+          savedAt: DateTime.now().toISO()
+        };
+        localStorage.setItem('argonnePlan', JSON.stringify(planData));
+
+        // Show reset button
+        resetBtn.style.display = 'block';
+
         // Initial status update
         updateStatus(days, anchor, originTz, destTz, dir.direction);
 
@@ -699,6 +887,10 @@
         // Add fade-in animation to results
         statusRow.classList.add('fade-in');
         document.getElementById('planTable').parentElement.classList.add('fade-in');
+
+        // Show success notification
+        showNotification('✓ Plan saved! You can return to this page anytime before your arrival.', 'success');
+        setTimeout(hideNotification, 5000);
 
         // Smooth scroll to results after a short delay
         setTimeout(() => {
