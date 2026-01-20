@@ -12,7 +12,11 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
-  <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"
+    integrity="sha384-MPG/j0tMZel8D/wdSK2M2n+fUXFQ6lHE3r5wnJZ25xVC8KKtBOvT9BGMOmLfSxGT"
+    crossorigin="anonymous"
+  ></script>
   <style>
     :root {
       --bg: #0b0f14;
@@ -291,6 +295,10 @@
       padding: 6px 12px;
       font-size: 0.85rem;
     }
+    .notification.error {
+      border-color: var(--danger);
+      background: rgba(255, 92, 122, 0.1);
+    }
     .reset-btn {
       margin-left: 8px;
     }
@@ -420,7 +428,17 @@
 
   <script>
     (function () {
-      const { DateTime, Duration, Interval, Settings } = luxon;
+      const { DateTime, Settings } = luxon;
+
+      // Configuration constants
+      const CONFIG = {
+        DEFAULT_DEPART_HOURS: 48,
+        DEFAULT_ARRIVE_HOURS: 56,
+        UPDATE_INTERVAL_MS: 1000,
+        NOTIFICATION_TIMEOUT_MS: 5000,
+        NOTIFICATION_RESET_TIMEOUT_MS: 3000,
+        DIET_DAYS: [-4, -3, -2, -1]
+      };
 
       const originTzEl = document.getElementById('originTz');
       const destTzEl = document.getElementById('destTz');
@@ -450,12 +468,13 @@
       let currentPlan = null;
       let updateInterval = null;
 
-      // Notification helper
-      function showNotification(message, type = 'info', actions = null) {
-        notificationEl.innerHTML = `
-          <div class="notification-content">${message}</div>
-          ${actions || ''}
-        `;
+      // Notification helper - uses safe DOM manipulation to prevent XSS
+      function showNotification(message, type = 'info') {
+        notificationEl.textContent = '';
+        const content = document.createElement('div');
+        content.className = 'notification-content';
+        content.textContent = message;
+        notificationEl.appendChild(content);
         notificationEl.className = `notification ${type}`;
         notificationEl.style.display = 'block';
       }
@@ -496,14 +515,14 @@
 
           // Reset form to defaults
           const now = DateTime.now();
-          departEl.value = now.plus({ hours: 48 }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
-          arriveEl.value = now.plus({ hours: 56 }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
+          departEl.value = now.plus({ hours: CONFIG.DEFAULT_DEPART_HOURS }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
+          arriveEl.value = now.plus({ hours: CONFIG.DEFAULT_ARRIVE_HOURS }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
           breakfastEl.value = '07:30';
           dirHintEl.textContent = '';
 
           // Show notification
           showNotification('Plan reset. Enter your trip details to create a new plan.', 'info');
-          setTimeout(hideNotification, 3000);
+          setTimeout(hideNotification, CONFIG.NOTIFICATION_RESET_TIMEOUT_MS);
         }
       });
 
@@ -526,6 +545,8 @@
 
       // Populate time zones
       const tzList = (Intl.supportedValuesOf && Intl.supportedValuesOf('timeZone')) || [];
+      const tzSet = new Set(tzList); // For O(1) validation lookup
+
       const addTzOptions = (sel) => {
         tzList.forEach((tz) => {
           const opt = document.createElement('option');
@@ -537,10 +558,18 @@
       addTzOptions(originTzEl);
       addTzOptions(destTzEl);
 
+      // Validate time zone against supported values
+      function isValidTimeZone(tz) {
+        return tzSet.has(tz);
+      }
+
       // Defaults
       try {
         originTzEl.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      } catch (_) {}
+      } catch (e) {
+        console.warn('Could not detect timezone, falling back to UTC:', e);
+        originTzEl.value = 'UTC';
+      }
       destTzEl.value = originTzEl.value;
 
       // Try to restore saved plan
@@ -595,7 +624,7 @@
             if (currentPlan) {
               updateStatus(currentPlan.days, currentPlan.anchor, currentPlan.originTz, currentPlan.destTz, currentPlan.direction);
             }
-          }, 1000);
+          }, CONFIG.UPDATE_INTERVAL_MS);
 
           // Show reset button
           resetBtn.style.display = 'block';
@@ -603,7 +632,7 @@
           // Show notification
           const savedDate = DateTime.fromISO(planData.savedAt);
           showNotification(`✓ Restored your saved plan from ${savedDate.toLocaleString(DateTime.DATETIME_MED)}`, 'info');
-          setTimeout(hideNotification, 5000);
+          setTimeout(hideNotification, CONFIG.NOTIFICATION_TIMEOUT_MS);
 
           return true;
         } catch (error) {
@@ -615,8 +644,8 @@
 
       // Pre-fill date/time fields nicely
       const now = DateTime.now();
-      departEl.value = now.plus({ hours: 48 }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
-      arriveEl.value = now.plus({ hours: 56 }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
+      departEl.value = now.plus({ hours: CONFIG.DEFAULT_DEPART_HOURS }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
+      arriveEl.value = now.plus({ hours: CONFIG.DEFAULT_ARRIVE_HOURS }).startOf('hour').toISO({ suppressSeconds: true, includeOffset: false });
       breakfastEl.value = '07:30';
 
       // Try to restore saved plan on load
@@ -653,7 +682,7 @@
       function planDiet(anchorBreakfastDest, originTz, destTz) {
         // Anchor = destination breakfast datetime (arrival day at dest breakfast clock time)
         // Generate 4 days prior: Day -4..-1 = FEAST, FAST, FEAST, FAST (Day -4 = Feast)
-        const days = [-4, -3, -2, -1].map((d, i) => {
+        const days = CONFIG.DIET_DAYS.map((d, i) => {
           const date = anchorBreakfastDest.plus({ days: d }).set({
             hour: 12, minute: 0, second: 0, millisecond: 0
           });
@@ -691,7 +720,9 @@
       }
 
       function renderPlan(days, originTz, destTz, direction, anchorDest) {
-        planTableBody.innerHTML = '';
+        planTableBody.textContent = '';
+        // Cache Settings.defaultZone for performance
+        const userZone = Settings.defaultZone || originTz;
         days.forEach(({ idx, date, stage }) => {
           const tr = document.createElement('tr');
 
@@ -702,7 +733,7 @@
 
           const tdDate = document.createElement('td');
           // Show user-local date for practicality
-          tdDate.textContent = fmtDate(date.setZone(Settings.defaultZone || originTz), Settings.defaultZone || originTz);
+          tdDate.textContent = fmtDate(date.setZone(userZone), userZone);
           tr.appendChild(tdDate);
 
           const tdStage = document.createElement('td');
@@ -715,10 +746,17 @@
 
           const tdMeals = document.createElement('td');
           const cw = caffeineWindowForDay(idx, direction, originTz, date);
-          tdMeals.innerHTML = `
-            ${stageAdvice(stage)}<br/>
-            <span class="hint">Caffeine window: <strong>${cw.label}</strong> (pre-travel day)</span>
-          `;
+          // Safe DOM manipulation to prevent XSS
+          tdMeals.appendChild(document.createTextNode(stageAdvice(stage)));
+          tdMeals.appendChild(document.createElement('br'));
+          const hintSpan = document.createElement('span');
+          hintSpan.className = 'hint';
+          hintSpan.appendChild(document.createTextNode('Caffeine window: '));
+          const strongEl = document.createElement('strong');
+          strongEl.textContent = cw.label;
+          hintSpan.appendChild(strongEl);
+          hintSpan.appendChild(document.createTextNode(' (pre-travel day)'));
+          tdMeals.appendChild(hintSpan);
           tr.appendChild(tdMeals);
 
           planTableBody.appendChild(tr);
@@ -737,7 +775,7 @@
         badge.setAttribute('role', 'status');
         td3.appendChild(badge);
         const td4 = document.createElement('td');
-        td4.innerHTML = 'High-protein breakfast at destination breakfast time; then follow destination mealtimes.';
+        td4.textContent = 'High-protein breakfast at destination breakfast time; then follow destination mealtimes.';
         tr.append(th1, td2, td3, td4);
         planTableBody.appendChild(tr);
       }
@@ -801,7 +839,13 @@
         const destTz = destTzEl.value;
 
         if (!originTz || !destTz) {
-          alert('Please select both origin and destination time zones.');
+          showNotification('Please select both origin and destination time zones.', 'error');
+          return;
+        }
+
+        // Validate time zones against supported values
+        if (!isValidTimeZone(originTz) || !isValidTimeZone(destTz)) {
+          showNotification('Invalid time zone selected. Please choose from the list.', 'error');
           return;
         }
 
@@ -809,22 +853,22 @@
         const arriveLocal = DateTime.fromISO(arriveEl.value, { zone: destTz });
 
         if (!departEl.value || !departLocal.isValid) {
-          alert('Please enter a valid departure date and time.');
+          showNotification('Please enter a valid departure date and time.', 'error');
           return;
         }
 
         if (!arriveEl.value || !arriveLocal.isValid) {
-          alert('Please enter a valid arrival date and time.');
+          showNotification('Please enter a valid arrival date and time.', 'error');
           return;
         }
 
         if (!breakfastEl.value || breakfastEl.value.trim() === '') {
-          alert('Please enter a breakfast time.');
+          showNotification('Please enter a breakfast time.', 'error');
           return;
         }
 
         if (arriveLocal <= departLocal) {
-          alert('Arrival time must be after departure time. Please check your dates.');
+          showNotification('Arrival time must be after departure time. Please check your dates.', 'error');
           return;
         }
         const dir = computeDirection(originTz, destTz, departLocal);
@@ -856,7 +900,7 @@
         // Store plan for real-time updates
         currentPlan = { days, anchor, originTz, destTz, direction: dir.direction };
 
-        // Save to localStorage with expiration
+        // Save to localStorage with expiration (wrapped in try-catch for private browsing mode)
         const planData = {
           days: days.map(d => ({ idx: d.idx, date: d.date.toISO(), stage: d.stage })),
           anchor: anchor.toISO(),
@@ -868,7 +912,11 @@
           breakfastTime: breakfastEl.value,
           savedAt: DateTime.now().toISO()
         };
-        localStorage.setItem('argonnePlan', JSON.stringify(planData));
+        try {
+          localStorage.setItem('argonnePlan', JSON.stringify(planData));
+        } catch (e) {
+          console.warn('Could not save plan to localStorage (private browsing?):', e);
+        }
 
         // Show reset button
         resetBtn.style.display = 'block';
@@ -882,7 +930,7 @@
           if (currentPlan) {
             updateStatus(currentPlan.days, currentPlan.anchor, currentPlan.originTz, currentPlan.destTz, currentPlan.direction);
           }
-        }, 1000); // Update every second
+        }, CONFIG.UPDATE_INTERVAL_MS); // Update every second
 
         // Add fade-in animation to results
         statusRow.classList.add('fade-in');
@@ -890,12 +938,20 @@
 
         // Show success notification
         showNotification('✓ Plan saved! You can return to this page anytime before your arrival.', 'success');
-        setTimeout(hideNotification, 5000);
+        setTimeout(hideNotification, CONFIG.NOTIFICATION_TIMEOUT_MS);
 
         // Smooth scroll to results after a short delay
         setTimeout(() => {
           statusRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }, 100);
+      });
+
+      // Cleanup interval on page unload to prevent memory leaks
+      window.addEventListener('beforeunload', () => {
+        if (updateInterval) {
+          clearInterval(updateInterval);
+          updateInterval = null;
+        }
       });
     })();
   </script>
